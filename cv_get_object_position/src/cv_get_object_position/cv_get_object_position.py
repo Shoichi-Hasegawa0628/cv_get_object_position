@@ -34,7 +34,7 @@ class CvGetObjectPosition():
         with open('../../config/target_objects.yaml', 'r') as yml:
             self.target_objects = yaml.load(yml)['names']
 
-        self.iter = 3
+        self.iter = 1
         self.neighborhood_value = 24
         self.flag = 0
         self.sum = []
@@ -78,7 +78,11 @@ class CvGetObjectPosition():
         return
 
     def bounding_callback(self, message):
-        if self.is_target_class_in_bboxes(message.boxes):
+        # ダブリ判定
+        # if self.is_target_class_in_bboxes(message.boxes):
+
+        # 1枚の画像に対象物のラベルが全て含まれているか
+        if self.is_all_target_in_image(message.boxes):
             for box in message.boxes:
                 if not box.name in self.target_objects:
                     continue
@@ -158,21 +162,23 @@ class CvGetObjectPosition():
                     print(len(self.target_obejcts_positions_tmp[idx][0]))
 
                     # もしいま処理している物体のiter回数が設定値と同じなら
-                    if len(self.target_obejcts_positions_tmp[idx][0]) == self.iter:
-                        self.target_objects_positions[box.name] = [median_x, median_y, median_z]
-                        print(self.target_objects_positions)
+                    # if len(self.target_obejcts_positions_tmp[idx][0]) == self.iter:
+
+                    self.target_objects_positions[box.name] = [median_x, median_y, median_z]
+                    print(self.target_objects_positions)
 
                     # もし対象物全てに対して処理を終えているのなら
-                    if len(list(self.target_objects_positions.keys())) == len(self.target_objects):
-                        print("ALL FINISHED !")
-                        rospy.loginfo("Calculatation is OK.")
-                        rospy.loginfo("Use this positions:{}".format(self.target_objects_positions))
-                        self.save_data()
-                        self.subscriber_for_point_cloud.unregister()
-                        self.subscriber_for_bounding_box.unregister()
-                        self.flag = 1
+                    # if len(list(self.target_objects_positions.keys())) == len(self.target_objects):
 
-                    return
+            print("ALL FINISHED !")
+            rospy.loginfo("Calculatation is OK.")
+            rospy.loginfo("Use this positions:{}".format(self.target_objects_positions))
+            self.save_data()
+            self.subscriber_for_point_cloud.unregister()
+            self.subscriber_for_bounding_box.unregister()
+            self.flag = 1
+
+            return
 
     def point_cloud_callback(self, point_cloud):
         self._point_cloud = pointcloud2_to_xyz_array(point_cloud, False)
@@ -185,14 +191,30 @@ class CvGetObjectPosition():
             rospy.loginfo("GET POINT ERROR")
             return False
 
-    def is_target_class_in_bboxes(self, bboxes):
+    def is_all_target_in_image(self, bboxes):
+        # bboxesに含まれるラベルをlist化
+        bbox_labels = []
         for bbox in bboxes:
-            if bbox.name in self.target_objects:
-                if bbox.name in list(self.target_objects_positions.keys()):
-                    return False
-                else:
-                    return True
-        return False
+            bbox_labels.append(bbox.name)
+
+        # TargetのListの物体が検出したBBの中に全て含まれるか
+        for i in range(len(self.target_objects)):
+            if self.target_objects[i] in bbox_labels:
+                pass
+            else:
+                return False
+
+        return True
+
+    # 同じ物体ラベルは処理を行わない
+    # def is_target_class_in_bboxes(self, bboxes):
+    #     for bbox in bboxes:
+    #         if bbox.name in self.target_objects:
+    #             if bbox.name in list(self.target_objects_positions.keys()):
+    #                 return False
+    #             else:
+    #                 return True
+    #     return False
 
     def get_neighborhood_points(self, cx, cy, value):
         """
