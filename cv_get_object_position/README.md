@@ -24,6 +24,9 @@ bash rest_data_folder.bash
 catkin_make (or catkin build)
 ~~~
 
+Please input target labels in `target_objects.yaml` of `config`.
+
+
 
 ## Execution of program
 ~~~
