@@ -33,6 +33,7 @@ class CvGetObjectPosition():
 
         with open('../../config/target_objects.yaml', 'r') as yml:
             self.target_objects = yaml.load(yml)['names']
+            self.target_objects_number = yaml.load(yml)['number']
 
         self.iter = 1
         self.neighborhood_value = 24
@@ -170,6 +171,17 @@ class CvGetObjectPosition():
                     # もし対象物全てに対して処理を終えているのなら
                     # if len(list(self.target_objects_positions.keys())) == len(self.target_objects):
 
+            # 対象の物体が入っているか
+            actual_objects = list(self.target_objects_positions.keys())
+            for i in range(len(self.target_objects)):
+                if not self.target_objects[i] in actual_objects:
+                    return
+
+            # 指定した個数入っているか
+            for i in range(len(list(actual_objects))):
+                if self.target_objects_number[i] != actual_objects.count(self.target_objects[i]):
+                    return
+
             print("ALL FINISHED !")
             rospy.loginfo("Calculatation is OK.")
             rospy.loginfo("Use this positions:{}".format(self.target_objects_positions))
@@ -291,8 +303,8 @@ class CvGetObjectPosition():
 
     def save_data(self):
         data = []
-        labels = list[self.target_objects_positions.keys()]
-        positions = list[self.target_objects_positions.values()]
+        labels = list(self.target_objects_positions.keys())
+        positions = list(self.target_objects_positions.values())
         with open('../../data/object_position.csv', 'w') as f:
             writer = csv.writer(f)
             for i in range(len(labels)):
