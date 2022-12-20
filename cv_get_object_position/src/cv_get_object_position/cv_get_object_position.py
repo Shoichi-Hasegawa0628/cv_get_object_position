@@ -32,26 +32,21 @@ class CvGetObjectPosition():
                  marker_array_topic="/view_target_objects_points"):
 
         with open('../../config/target_objects.yaml', 'r') as yml:
-            self.target_objects = yaml.load(yml)['names']
-            self.target_objects_number = yaml.load(yml)['number']
+            object_yaml = yaml.load(yml, Loader=yaml.SafeLoader)
+            self.target_objects = object_yaml['names']
+            self.target_objects_number = object_yaml['number']
 
-        self.iter = 1
         self.neighborhood_value = 24
         self.flag = 0
-        self.sum = []
-        self.x = []
-        self.y = []
-        self.z = []
         self.id_count = 0
-        self.target_objects_positions = {}
-        self.target_obejcts_positions_tmp = []
-        for i in range(len(self.target_objects)):
-            self.target_obejcts_positions_tmp.append([[], [], []])
         self.bounding_topic_name = yolo_bb_topic
         self.point_cloud_name = point_cloud_topic
         self.marker_array_data = MarkerArray()
         self.pub_marker_array = rospy.Publisher(marker_array_topic, MarkerArray, queue_size=1)
-        self.tflistener = TransformListener()
+        # self.tflistener = TransformListener()
+
+        self.tf_buffer = tf2_ros.Buffer()
+        self.tf_listener = tf2_ros.TransformListener(self.tf_buffer)
 
     def main(self):
         self.setup_subscriber()
@@ -79,12 +74,13 @@ class CvGetObjectPosition():
         return
 
     def bounding_callback(self, message):
+        target_objects_positions = {}
         # ダブリ判定
         # if self.is_target_class_in_bboxes(message.boxes):
 
         # 1枚の画像に対象物のラベルが全て含まれているか
         if self.is_all_target_in_image(message.boxes):
-            for box in message.boxes:
+            for j, box in enumerate(message.boxes):
                 if not box.name in self.target_objects:
                     continue
 
@@ -97,15 +93,25 @@ class CvGetObjectPosition():
                 if position is False:
                     continue
 
+                print(position)
                 # rospy.loginfo("cX:{} cY:{} cZ:{}".format(position[0], position[1], position[2]))  # Camera Coordinate
 
                 if not (position is None):
-                    tf_buffer = tf2_ros.Buffer()
-                    tf_listener = tf2_ros.TransformListener(tf_buffer)
+                    # tf_buffer = tf2_ros.Buffer()
+                    # tf_listener = tf2_ros.TransformListener(tf_buffer)
                     try:
-                        self.trans = tf_buffer.lookup_transform('map', 'head_rgbd_sensor_rgb_frame', rospy.Time(0),
+                        self.trans = self.tf_buffer.lookup_transform('map', 'head_rgbd_sensor_rgb_frame', rospy.Time(0),
                                                                 rospy.Duration(1.0))
-                    except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
+                    except tf.LookupException as e_1:
+                        print(e_1)
+                        return
+
+                    except tf.ConnectivityException as e_2:
+                        print(e_2)
+                        return
+
+                    except tf.ExtrapolationException as e_3:
+                        print(e_3)
                         return
 
                     neighborhood_points = self.get_neighborhood_points(cx, cy, self.neighborhood_value)
@@ -147,44 +153,39 @@ class CvGetObjectPosition():
                     median_neighborhood_points_y = statistics.median(transformed_points[1])
                     median_neighborhood_points_z = statistics.median(transformed_points[2])
 
-                    # 物体ごとに格納場所を分ける作業
-                    idx = self.target_objects.index(box.name)
-                    self.target_obejcts_positions_tmp[idx][0].append(median_neighborhood_points_x)
-                    self.target_obejcts_positions_tmp[idx][1].append(median_neighborhood_points_y)
-                    self.target_obejcts_positions_tmp[idx][2].append(median_neighborhood_points_z)
+                    target_objects_positions[j] = [box.name, median_neighborhood_points_x, median_neighborhood_points_y, median_neighborhood_points_z]
+                    print(target_objects_positions)
 
-                    # 格納した物体の座標のみに適用
-                    median_x = statistics.median(self.target_obejcts_positions_tmp[idx][0])
-                    median_y = statistics.median(self.target_obejcts_positions_tmp[idx][1])
-                    median_z = statistics.median(self.target_obejcts_positions_tmp[idx][2])
-
-                    # rospy.loginfo(
-                    #     "Class:{} medX:{:.3f} medY:{:.3f} medZ:{:.3f}".format(box.Class, median_x, median_y, median_z))
-                    print(len(self.target_obejcts_positions_tmp[idx][0]))
-
-                    # もしいま処理している物体のiter回数が設定値と同じなら
-                    # if len(self.target_obejcts_positions_tmp[idx][0]) == self.iter:
-
-                    self.target_objects_positions[box.name] = [median_x, median_y, median_z]
-                    print(self.target_objects_positions)
-
-                    # もし対象物全てに対して処理を終えているのなら
-                    # if len(list(self.target_objects_positions.keys())) == len(self.target_objects):
+            # 取得した物体ラベルを格納
+            value_list = list(target_objects_positions.values())
+            actual_objects = []
+            for i in range(len(value_list)):
+                actual_objects.append(value_list[i][0])
 
             # 対象の物体が入っているか
-            actual_objects = list(self.target_objects_positions.keys())
             for i in range(len(self.target_objects)):
                 if not self.target_objects[i] in actual_objects:
                     return
+    
+            print("Correct object name")
+            print("\n")
 
             # 指定した個数入っているか
-            for i in range(len(list(actual_objects))):
-                if self.target_objects_number[i] != actual_objects.count(self.target_objects[i]):
+            for i in range(len(actual_objects)):
+                object_idex = self.target_objects.index(actual_objects[i])
+                print(actual_objects)
+                print(self.target_objects_number[object_idex])
+                print(actual_objects.count(self.target_objects[object_idex]))
+                if self.target_objects_number[object_idex] != actual_objects.count(self.target_objects[object_idex]):
+                    print("Fail number")
                     return
+
+            print("Correct object number")
 
             print("ALL FINISHED !")
             rospy.loginfo("Calculatation is OK.")
-            rospy.loginfo("Use this positions:{}".format(self.target_objects_positions))
+            rospy.loginfo("Use this positions:{}".format(target_objects_positions))
+            self.target_objects_positions = target_objects_positions
             self.save_data()
             self.subscriber_for_point_cloud.unregister()
             self.subscriber_for_bounding_box.unregister()
@@ -218,16 +219,6 @@ class CvGetObjectPosition():
 
         return True
 
-    # 同じ物体ラベルは処理を行わない
-    # def is_target_class_in_bboxes(self, bboxes):
-    #     for bbox in bboxes:
-    #         if bbox.name in self.target_objects:
-    #             if bbox.name in list(self.target_objects_positions.keys()):
-    #                 return False
-    #             else:
-    #                 return True
-    #     return False
-
     def get_neighborhood_points(self, cx, cy, value):
         """
         画像座標系
@@ -260,12 +251,14 @@ class CvGetObjectPosition():
         return neighborhood_points
 
     def visualization_target_object_positions(self):
-        for o in range(len(self.target_objects)):
+        boxes = list(self.target_objects_positions.keys())
+        value_list = list(self.target_objects_positions.values())
+        for i in range(len(boxes)):
             pose_marker = self.init_marker()
+            pose_marker.pose.position.x = value_list[i][2]
+            pose_marker.pose.position.y = value_list[i][3]
+            pose_marker.pose.position.z = value_list[i][4]
 
-            pose_marker.pose.position.x = self.target_objects_positions[self.target_objects[o]][0]
-            pose_marker.pose.position.y = self.target_objects_positions[self.target_objects[o]][1]
-            pose_marker.pose.position.z = self.target_objects_positions[self.target_objects[o]][2]
             pose_marker.color.r = 0.8
             pose_marker.color.g = 0.0
             pose_marker.color.b = 0.0
@@ -274,10 +267,14 @@ class CvGetObjectPosition():
             pose_marker.id = self.id_count
             pose_marker.ns = "marker" + str(self.id_count)
             self.marker_array_data.markers.append(pose_marker)
-        r = rospy.Rate(10)
+
+        r = rospy.Rate(5)
         while not rospy.is_shutdown():
             self.pub_marker_array.publish(self.marker_array_data)
             r.sleep()
+        
+
+        
 
     def init_marker(self):
 
@@ -297,7 +294,7 @@ class CvGetObjectPosition():
         def_pose_marker.pose.orientation.x = 0.0
         def_pose_marker.pose.orientation.y = 0.0
         def_pose_marker.pose.orientation.z = 0.0
-        def_pose_marker.pose.orientation.w = 0.0
+        def_pose_marker.pose.orientation.w = 1.0
 
         return def_pose_marker
 
@@ -315,4 +312,4 @@ if __name__ == "__main__":
     rospy.init_node('cv_get_object_position')
     cv_get_object_position = CvGetObjectPosition()
     cv_get_object_position.main()
-    rospy.spin()
+    # rospy.spin()

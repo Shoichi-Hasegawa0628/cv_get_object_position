@@ -17,14 +17,14 @@ In addition, this is ROS package.
 ## Setup
 ~~~
 cd /cv_get_object_position/cv_get_object_position/bash
-bash rest_data_folder.bash
+bash reset_data_folder.bash
 ~~~
 
 ~~~
 catkin_make (or catkin build)
 ~~~
 
-Please input target labels in `target_objects.yaml` of `config`.
+Please input target labels and number in `target_objects.yaml` of `config`.
 
 
 
